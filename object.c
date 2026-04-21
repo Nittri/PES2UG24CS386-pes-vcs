@@ -94,19 +94,26 @@ int object_exists(const ObjectID *id) {
 
 //
 // Returns 0 on success, -1 on error.
-
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out) {
     if (!id_out) return -1;
+    if (len > 0 && !data) return -1;
 
-    const char *type_str = "blob";
+    const char *type_str = NULL;
+    switch (type) {
+        case OBJ_BLOB: type_str = "blob"; break;
+        case OBJ_TREE: type_str = "tree"; break;
+        case OBJ_COMMIT: type_str = "commit"; break;
+        default: return -1;
+    }
 
     char header[64];
-    int header_len = snprintf(header, sizeof(header), "%s %zu", type_str, len) + 1;
+    int header_written = snprintf(header, sizeof(header), "%s %zu", type_str, len);
+    if (header_written < 0 || (size_t)header_written >= sizeof(header) - 1) return -1;
+    size_t header_len = (size_t)header_written + 1; // include '\0'
 
     size_t obj_len = header_len + len;
     uint8_t *obj = malloc(obj_len);
     if (!obj) return -1;
-
     memcpy(obj, header, header_len);
     if (len > 0 && data) {
         memcpy(obj + header_len, data, len);
@@ -159,7 +166,6 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
         free(obj);
         return -1;
     }
-
     if (close(fd) != 0) {
         unlink(tmp_path);
         free(obj);
@@ -215,7 +221,6 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
         fclose(f);
         return -1;
     }
-
     long file_size = ftell(f);
     if (file_size < 0 || fseek(f, 0, SEEK_SET) != 0) {
         fclose(f);
@@ -250,19 +255,16 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
     }
 
     size_t header_len = (size_t)(nul - raw);
-
     char header[64];
     if (header_len >= sizeof(header)) {
         free(raw);
         return -1;
     }
-
     memcpy(header, raw, header_len);
     header[header_len] = '\0';
 
     char type_str[16];
     size_t payload_len = 0;
-
     if (sscanf(header, "%15s %zu", type_str, &payload_len) != 2) {
         free(raw);
         return -1;
@@ -287,14 +289,10 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
         free(raw);
         return -1;
     }
-
-    if (payload_len > 0) {
-        memcpy(payload, raw + data_off, payload_len);
-    }
+    if (payload_len > 0) memcpy(payload, raw + data_off, payload_len);
 
     *data_out = payload;
     *len_out = payload_len;
-
     free(raw);
     return 0;
 }
