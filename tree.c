@@ -139,7 +139,8 @@ int tree_from_index(ObjectID *id_out) {
     for (int i = 0; i < index.count; i++) {
         const IndexEntry *e = &index.entries[i];
 
-        if (strchr(e->path, '/')) continue;
+        const char *slash = strchr(e->path, '/');
+        if (slash) continue;
 
         if (tree.count >= MAX_TREE_ENTRIES) return -1;
 
