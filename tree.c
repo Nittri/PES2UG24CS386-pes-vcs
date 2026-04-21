@@ -133,29 +133,55 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 static int write_tree_level(const Index *index, const char *prefix, ObjectID *id_out) {
     Tree tree;
     tree.count = 0;
-    return -1;
-}
 
-int tree_from_index(ObjectID *id_out) {
-    Index index;
-    if (index_load(&index) != 0) return -1;
+    size_t prefix_len = strlen(prefix);
 
-    return write_tree_level(&index, "", id_out);
-    Tree tree;
-    tree.count = 0;
+    for (int i = 0; i < index->count; i++) {
+        const IndexEntry *e = &index->entries[i];
 
-    for (int i = 0; i < index.count; i++) {
-        const IndexEntry *e = &index.entries[i];
+        if (strncmp(e->path, prefix, prefix_len) != 0) continue;
 
-        const char *slash = strchr(e->path, '/');
-        if (slash) continue;
+        const char *rest = e->path + prefix_len;
+        if (rest[0] == '\0') continue;
+
+        const char *slash = strchr(rest, '/');
+
+        if (!slash) {
+            if (tree.count >= MAX_TREE_ENTRIES) return -1;
+
+            TreeEntry *out = &tree.entries[tree.count++];
+            out->mode = e->mode;
+            out->hash = e->hash;
+            snprintf(out->name, sizeof(out->name), "%s", rest);
+            continue;
+        }
+
+        size_t dir_len = slash - rest;
+        char dirname[256];
+        memcpy(dirname, rest, dir_len);
+        dirname[dir_len] = '\0';
+
+        int exists = 0;
+        for (int j = 0; j < tree.count; j++) {
+            if (strcmp(tree.entries[j].name, dirname) == 0) {
+                exists = 1;
+                break;
+            }
+        }
+        if (exists) continue;
+
+        char child_prefix[1024];
+        snprintf(child_prefix, sizeof(child_prefix), "%s%s/", prefix, dirname);
+
+        ObjectID subtree;
+        if (write_tree_level(index, child_prefix, &subtree) != 0) return -1;
 
         if (tree.count >= MAX_TREE_ENTRIES) return -1;
 
         TreeEntry *out = &tree.entries[tree.count++];
-        out->mode = e->mode;
-        out->hash = e->hash;
-        snprintf(out->name, sizeof(out->name), "%s", e->path);
+        out->mode = MODE_DIR;
+        out->hash = subtree;
+        snprintf(out->name, sizeof(out->name), "%s", dirname);
     }
 
     void *raw = NULL;
@@ -165,4 +191,11 @@ int tree_from_index(ObjectID *id_out) {
     int rc = object_write(OBJ_TREE, raw, raw_len, id_out);
     free(raw);
     return rc;
+}
+
+int tree_from_index(ObjectID *id_out) {
+    Index index;
+    if (index_load(&index) != 0) return -1;
+
+    return write_tree_level(&index, "", id_out);
 }
