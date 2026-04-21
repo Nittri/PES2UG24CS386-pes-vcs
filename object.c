@@ -140,7 +140,36 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
         return -1;
     }
 
-    close(fd);
+    size_t written_total = 0;
+    while (written_total < obj_len) {
+        ssize_t n = write(fd, obj + written_total, obj_len - written_total);
+        if (n <= 0) {
+            close(fd);
+            unlink(tmp_path);
+            free(obj);
+            return -1;
+        }
+        written_total += (size_t)n;
+    }
+
+    if (fsync(fd) != 0) {
+        close(fd);
+        unlink(tmp_path);
+        free(obj);
+        return -1;
+    }
+
+    if (close(fd) != 0) {
+        unlink(tmp_path);
+        free(obj);
+        return -1;
+    }
+
+    if (rename(tmp_path, final_path) != 0) {
+        unlink(tmp_path);
+        free(obj);
+        return -1;
+    }
 
     free(obj);
     return 0;
