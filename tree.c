@@ -17,6 +17,9 @@
 #include <sys/stat.h>
 #include "index.h"
 
+// Forward declaration (implemented in object.c)
+int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out);
+
 // ─── Mode Constants ─────────────────────────────────────────────────────────
 
 #define MODE_FILE      0100644
@@ -130,7 +133,6 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 //   - object_write    : save that binary buffer to the store as OBJ_TREE
 //
 // Returns 0 on success, -1 on error.
-
 static int write_tree_level(const Index *index, const char *prefix, ObjectID *id_out) {
     Tree tree;
     tree.count = 0;
@@ -139,17 +141,14 @@ static int write_tree_level(const Index *index, const char *prefix, ObjectID *id
 
     for (int i = 0; i < index->count; i++) {
         const IndexEntry *e = &index->entries[i];
-
         if (strncmp(e->path, prefix, prefix_len) != 0) continue;
 
         const char *rest = e->path + prefix_len;
         if (rest[0] == '\0') continue;
 
         const char *slash = strchr(rest, '/');
-
         if (!slash) {
             if (tree.count >= MAX_TREE_ENTRIES) return -1;
-
             TreeEntry *out = &tree.entries[tree.count++];
             out->mode = e->mode;
             out->hash = e->hash;
@@ -157,14 +156,12 @@ static int write_tree_level(const Index *index, const char *prefix, ObjectID *id
             continue;
         }
 
-        size_t dir_len = slash - rest;
+        size_t dir_len = (size_t)(slash - rest);
+        if (dir_len == 0 || dir_len >= sizeof(tree.entries[0].name)) return -1;
 
-	if (dir_len == 0 || dir_len >= sizeof(dirname))
-	    return -1;
-
-	char dirname[256];
-	memcpy(dirname, rest, dir_len);
-	dirname[dir_len] = '\0';
+        char dirname[256];
+        memcpy(dirname, rest, dir_len);
+        dirname[dir_len] = '\0';
 
         int exists = 0;
         for (int j = 0; j < tree.count; j++) {
@@ -176,16 +173,14 @@ static int write_tree_level(const Index *index, const char *prefix, ObjectID *id
         if (exists) continue;
 
         char child_prefix[1024];
-
         if (snprintf(child_prefix, sizeof(child_prefix), "%s%s/", prefix, dirname) >= (int)sizeof(child_prefix)) {
-    		return -1;
-	}
+            return -1;
+        }
 
         ObjectID subtree;
         if (write_tree_level(index, child_prefix, &subtree) != 0) return -1;
 
         if (tree.count >= MAX_TREE_ENTRIES) return -1;
-
         TreeEntry *out = &tree.entries[tree.count++];
         out->mode = MODE_DIR;
         out->hash = subtree;
@@ -204,6 +199,5 @@ static int write_tree_level(const Index *index, const char *prefix, ObjectID *id
 int tree_from_index(ObjectID *id_out) {
     Index index;
     if (index_load(&index) != 0) return -1;
-
     return write_tree_level(&index, "", id_out);
 }
