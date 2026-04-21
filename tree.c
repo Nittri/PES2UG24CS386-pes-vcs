@@ -15,6 +15,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include "index.h"
 
 // ─── Mode Constants ─────────────────────────────────────────────────────────
 
@@ -157,9 +158,13 @@ static int write_tree_level(const Index *index, const char *prefix, ObjectID *id
         }
 
         size_t dir_len = slash - rest;
-        char dirname[256];
-        memcpy(dirname, rest, dir_len);
-        dirname[dir_len] = '\0';
+
+	if (dir_len == 0 || dir_len >= sizeof(dirname))
+	    return -1;
+
+	char dirname[256];
+	memcpy(dirname, rest, dir_len);
+	dirname[dir_len] = '\0';
 
         int exists = 0;
         for (int j = 0; j < tree.count; j++) {
