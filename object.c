@@ -97,7 +97,7 @@ int object_exists(const ObjectID *id) {
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out) {
     if (!id_out) return -1;
 
-    const char *type_str = "blob"; // minimal for now
+    const char *type_str = "blob";
 
     char header[64];
     int header_len = snprintf(header, sizeof(header), "%s %zu", type_str, len) + 1;
@@ -112,6 +112,11 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
     }
 
     compute_hash(obj, obj_len, id_out);
+
+    if (object_exists(id_out)) {
+        free(obj);
+        return 0;
+    }
 
     free(obj);
     return 0;
