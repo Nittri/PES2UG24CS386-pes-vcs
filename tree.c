@@ -171,7 +171,10 @@ static int write_tree_level(const Index *index, const char *prefix, ObjectID *id
         if (exists) continue;
 
         char child_prefix[1024];
-        snprintf(child_prefix, sizeof(child_prefix), "%s%s/", prefix, dirname);
+
+        if (snprintf(child_prefix, sizeof(child_prefix), "%s%s/", prefix, dirname) >= (int)sizeof(child_prefix)) {
+    		return -1;
+	}
 
         ObjectID subtree;
         if (write_tree_level(index, child_prefix, &subtree) != 0) return -1;
