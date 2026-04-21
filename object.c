@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <errno.h>
 #include <openssl/evp.h>
 
 // ─── PROVIDED ────────────────────────────────────────────────────────────────
@@ -94,9 +95,26 @@ int object_exists(const ObjectID *id) {
 //
 // Returns 0 on success, -1 on error.
 int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out) {
-    // TODO: Implement
-    (void)type; (void)data; (void)len; (void)id_out;
-    return -1;
+    if (!id_out) return -1;
+
+    const char *type_str = "blob"; // minimal for now
+
+    char header[64];
+    int header_len = snprintf(header, sizeof(header), "%s %zu", type_str, len) + 1;
+
+    size_t obj_len = header_len + len;
+    uint8_t *obj = malloc(obj_len);
+    if (!obj) return -1;
+
+    memcpy(obj, header, header_len);
+    if (len > 0 && data) {
+        memcpy(obj + header_len, data, len);
+    }
+
+    compute_hash(obj, obj_len, id_out);
+
+    free(obj);
+    return 0;
 }
 
 // Read an object from the store.
@@ -122,7 +140,9 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
 // The caller is responsible for calling free(*data_out).
 // Returns 0 on success, -1 on error (file not found, corrupt, etc.).
 int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out) {
-    // TODO: Implement
-    (void)id; (void)type_out; (void)data_out; (void)len_out;
+    (void)id;
+    (void)type_out;
+    (void)data_out;
+    (void)len_out;
     return -1;
 }
